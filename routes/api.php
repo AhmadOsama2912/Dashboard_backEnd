@@ -7,6 +7,9 @@ use App\Http\Controllers\Admin\AdminPackageController;       // Packages
 use App\Http\Controllers\Admin\AdminCustomerController;      // Customers
 use App\Http\Controllers\Admin\AdminCustomerUserController;  // Tenant Users (manager/supervisor)
 use App\Http\Controllers\User\UserTokenController;
+use App\Http\Controllers\Screen\ScreenController;
+use App\Http\Controllers\User\UserScreenAssignController;
+use App\Http\Controllers\Admin\AdminEnrollmentCodeController;
 
 Route::prefix('admin/v1')->middleware('force.json')->group(function () {
     // --- Auth (token) ---
@@ -71,4 +74,26 @@ Route::prefix('user/v1')->middleware('force.json')->group(function () {
         Route::post('/logout', [UserTokenController::class, 'logout']);
         Route::post('/logout-all', [UserTokenController::class, 'logoutAll']);
     });
+});
+
+
+Route::prefix('user/v1')->middleware(['force.json','auth:sanctum'])->group(function () {
+  // المدير فقط
+  Route::middleware('abilities:user:screens:assign')->group(function () {
+    Route::patch('/screens/{screen}/assign',   [UserScreenAssignController::class, 'assign'])->whereNumber('screen');
+    Route::patch('/screens/{screen}/unassign', [UserScreenAssignController::class, 'unassign'])->whereNumber('screen');
+  });
+});
+
+
+Route::prefix('screen/v1')->middleware('force.json')->group(function () {
+  Route::post('/register',  [ScreenController::class, 'register'])->middleware('throttle:10,1');
+  Route::post('/heartbeat', [ScreenController::class, 'heartbeat'])->middleware('screen.auth','throttle:60,1');
+  Route::get('/config',     [ScreenController::class, 'config'])->middleware('screen.auth','throttle:60,1');
+});
+
+
+Route::prefix('admin/v1')->middleware(['force.json','auth:sanctum','abilities:admin:manage'])->group(function () {
+    Route::post('/enrollment-codes', [AdminEnrollmentCodeController::class, 'store']); // create
+    Route::get('/enrollment-codes',  [AdminEnrollmentCodeController::class, 'index']); // list
 });

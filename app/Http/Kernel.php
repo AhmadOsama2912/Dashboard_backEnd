@@ -67,6 +67,7 @@ class Kernel extends HttpKernel
          // Sanctum ability middlewares:
         'abilities' => \Laravel\Sanctum\Http\Middleware\CheckAbilities::class,       // require ALL listed abilities
         'ability'   => \Laravel\Sanctum\Http\Middleware\CheckForAnyAbility::class,   // require ANY of the listed abilities
-        'force.json' => \App\Http\Middleware\ForceJsonResponse::class,
+        'force.json' => \App\Http\Middleware\ForceJsonResponse::class, // Force JSON response for all API's 
+        'screen.auth' => \App\Http\Middleware\ScreenTokenAuth::class, // Authenticate screens via X-Screen-Token header
     ];
 }
