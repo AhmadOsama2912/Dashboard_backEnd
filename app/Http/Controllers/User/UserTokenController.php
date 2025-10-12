@@ -56,19 +56,33 @@ class UserTokenController extends Controller
         }
 
         // 4) Build role-based abilities
-        $abilities = ['user:basic','user:screens:read'];
+        $abilities = ['user:screens:read'];
+
         if ($user->role === 'manager') {
-            $abilities[] = 'user:supervisors:create';
-            $abilities[] = 'user:screens:assign';
+            $abilities = array_merge($abilities, [
+                'user:screens:assign',      // per-screen + bulk (company or selected)
+                'user:screens:broadcast',   // refresh WS per-screen + bulk
+                'user:playlist:write',      // (optional) if you let managers CRUD playlists/items
+                'user:playlist:items:write',
+                'user:playlist:reorder',
+            ]);
         }
 
-        $token = $user->createToken($request->input('device','user-api'), $abilities)->plainTextToken;
+        if ($user->role === 'supervisor') {
+            // only for screens assigned to that supervisor
+            $abilities = array_merge($abilities, [
+                'user:screens:assign',
+                'user:screens:broadcast',
+            ]);
+        }
+
+        $token = $user->createToken($request->input('device','user-api'), $abilities);
 
         // telemetry (optional)
         $user->forceFill(['last_login_at'=>now(),'last_login_ip'=>$request->ip()])->save();
 
         return response()->json([
-            'token' => $token,
+            'token' => $token->plainTextToken,
             'user'  => [
                 'id' => $user->id,
                 'customer_id' => $user->customer_id,

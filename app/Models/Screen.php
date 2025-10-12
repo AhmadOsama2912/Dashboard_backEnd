@@ -19,6 +19,9 @@ class Screen extends Model
         'meta' => 'array',
     ];
 
+
+    public function playlist() { return $this->belongsTo(\App\Models\Playlist::class); }
+
     public function customer(){ return $this->belongsTo(Customer::class); }
     public function assignee(){ return $this->belongsTo(User::class, 'assigned_user_id'); }
 
@@ -28,4 +31,31 @@ class Screen extends Model
         if ($this->last_check_in_at && $this->last_check_in_at->gt(now()->subMinutes(5))) return 'active';
         return 'not_active';
     }
+
+    public function scopeOnline($q, $minutes = null) {
+    $m = (int) ($minutes ?? config('screens.online_grace_minutes', 5));
+    return $q->where('last_check_in_at', '>=', now()->subMinutes($m));
+    }
+    
+    public function scopeOffline($q, $minutes = null) {
+        $m = (int) ($minutes ?? config('screens.online_grace_minutes', 5));
+        return $q->where(function($qq) use ($m) {
+            $qq->whereNull('last_check_in_at')
+            ->orWhere('last_check_in_at', '<', now()->subMinutes($m));
+        });
+    }
+
+    public function licenses()
+    {
+        return $this->hasMany(\App\Models\ScreenLicense::class);
+    }
+    public function activeLicenses()
+    {
+        return $this->hasMany(\App\Models\ScreenLicense::class)
+            ->where('status', 'active')
+            ->where('expires_at', '>=', now());
+    }
+
+
+
 }
