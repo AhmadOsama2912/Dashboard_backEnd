@@ -56,6 +56,13 @@ class Screen extends Model
             ->where('expires_at', '>=', now());
     }
 
+    public function latestLicense()
+    {
+        // Laravel 9+: return $this->hasOne(ScreenLicense::class)->latestOfMany('expires_at');
+        return $this->hasOne(\App\Models\ScreenLicense::class)->latest('expires_at');
+    }
+
+    
 
 
 }

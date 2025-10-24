@@ -4,47 +4,80 @@ namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
 use App\Models\Playlist;
+use App\Services\PlaylistResolver;
+use App\Events\ScreenConfigUpdated;
 use Illuminate\Http\Request;
 
 class CompanyPlaylistController extends Controller
 {
-    // List company playlists (manager scope)
+    public function __construct(private PlaylistResolver $resolver)
+    {
+        // Optionally also enforce ability middleware here if routes don't:
+        // $this->middleware('abilities:user:playlist:write');
+    }
+
+    /**
+     * GET /user/v1/playlists
+     * Manager-only: list company playlists (paginated, searchable).
+     */
     public function index(Request $request)
     {
         $u = $request->user();
-        if ($u->role !== 'manager') return response()->json(['message' => 'Only managers'], 403);
+        if ($u->role !== 'manager') {
+            return response()->json(['message' => 'Only managers'], 403);
+        }
 
         $data = $request->validate([
-            'q'        => ['nullable','string','max:190'],
-            'per_page' => ['nullable','integer','min:1','max:100'],
+            'q'        => ['nullable', 'string', 'max:190'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $q = Playlist::withCount('items')->where('customer_id', $u->customer_id)->latest();
-        if (!empty($data['q'])) $q->where('name', 'like', '%'.$data['q'].'%');
+        $q = Playlist::withCount('items')
+            ->where('customer_id', $u->customer_id)
+            ->latest();
+
+        if (!empty($data['q'])) {
+            $q->where('name', 'like', '%' . $data['q'] . '%');
+        }
 
         return response()->json($q->paginate($data['per_page'] ?? 15));
     }
 
-    // Show a playlist (must be in same company)
+    /**
+     * GET /user/v1/playlists/{playlist}
+     * Manager-only: show a playlist in same company (with ordered items).
+     */
     public function show(Request $request, Playlist $playlist)
     {
         $u = $request->user();
-        if ($u->customer_id !== $playlist->customer_id) return response()->json(['message'=>'Out of scope'], 403);
+        if ($u->role !== 'manager') {
+            return response()->json(['message' => 'Only managers'], 403);
+        }
+        if ($u->customer_id !== $playlist->customer_id) {
+            return response()->json(['message' => 'Out of scope'], 403);
+        }
 
-        return response()->json($playlist->load(['items' => fn($q) => $q->orderBy('sort')]));
+        return response()->json(
+            $playlist->load(['items' => fn($q) => $q->orderBy('sort')])
+        );
     }
 
-    // Create a playlist for the manager's company
+    /**
+     * POST /user/v1/playlists
+     * Manager-only: create a playlist for the manager's company.
+     */
     public function store(Request $request)
     {
         $u = $request->user();
-        if ($u->role !== 'manager') return response()->json(['message'=>'Only managers'], 403);
+        if ($u->role !== 'manager') {
+            return response()->json(['message' => 'Only managers'], 403);
+        }
 
         $data = $request->validate([
-            'name'         => ['required','string','max:190'],
-            'is_default'   => ['sometimes','boolean'],
-            'published_at' => ['sometimes','nullable','date'],
-            'meta'         => ['nullable','array'],
+            'name'         => ['required', 'string', 'max:190'],
+            'is_default'   => ['sometimes', 'boolean'],
+            'published_at' => ['sometimes', 'nullable', 'date'],
+            'meta'         => ['nullable', 'array'],
         ]);
 
         $playlist = Playlist::create([
@@ -55,102 +88,152 @@ class CompanyPlaylistController extends Controller
             'meta'         => $data['meta'] ?? null,
         ]);
 
+        // If marked default, clear other defaults and forget cache.
         if ($playlist->is_default) {
             Playlist::where('customer_id', $u->customer_id)
                 ->where('id', '!=', $playlist->id)
                 ->update(['is_default' => false]);
+
+            $this->resolver->forgetCompanyDefault($u->customer_id);
+            // Broadcast to all company screens (default consumers).
+            event(new ScreenConfigUpdated($u->customer_id, null, $playlist->content_version ?? ''));
         }
 
-        return response()->json(['message'=>'Playlist created','playlist'=>$playlist], 201);
+        return response()->json(['message' => 'Playlist created', 'playlist' => $playlist], 201);
     }
 
-    // Update a playlist (name / default / publish time / meta)
+    /**
+     * PATCH /user/v1/playlists/{playlist}
+     * Manager-only: update playlist fields (name/default/published_at/meta).
+     */
     public function update(Request $request, Playlist $playlist)
     {
         $u = $request->user();
-        if ($u->customer_id !== $playlist->customer_id) return response()->json(['message'=>'Out of scope'], 403);
-        if ($u->role !== 'manager') return response()->json(['message'=>'Only managers'], 403);
+        if ($u->role !== 'manager') {
+            return response()->json(['message' => 'Only managers'], 403);
+        }
+        if ($u->customer_id !== $playlist->customer_id) {
+            return response()->json(['message' => 'Out of scope'], 403);
+        }
 
         $data = $request->validate([
-            'name'         => ['nullable','string','max:190'],
-            'is_default'   => ['sometimes','boolean'],
-            'published_at' => ['sometimes','nullable','date'],
-            'meta'         => ['nullable','array'],
+            'name'         => ['nullable', 'string', 'max:190'],
+            'is_default'   => ['sometimes', 'boolean'],
+            'published_at' => ['sometimes', 'nullable', 'date'],
+            'meta'         => ['nullable', 'array'],
         ]);
 
         $playlist->fill($data)->save();
 
+        // If toggled to default, make it the only default and clear cache + broadcast.
         if (array_key_exists('is_default', $data) && $data['is_default']) {
             Playlist::where('customer_id', $u->customer_id)
                 ->where('id', '!=', $playlist->id)
                 ->update(['is_default' => false]);
+
+            $this->resolver->forgetCompanyDefault($u->customer_id);
+            event(new ScreenConfigUpdated($u->customer_id, null, $playlist->content_version ?? ''));
         }
 
-        return response()->json(['message'=>'Playlist updated','playlist'=>$playlist->fresh()]);
+        return response()->json(['message' => 'Playlist updated', 'playlist' => $playlist->fresh()]);
     }
 
-    // Delete a playlist
+    /**
+     * DELETE /user/v1/playlists/{playlist}
+     * Manager-only: delete a playlist.
+     */
     public function destroy(Request $request, Playlist $playlist)
     {
         $u = $request->user();
-        if ($u->customer_id !== $playlist->customer_id) return response()->json(['message'=>'Out of scope'], 403);
-        if ($u->role !== 'manager') return response()->json(['message'=>'Only managers'], 403);
+        if ($u->role !== 'manager') {
+            return response()->json(['message' => 'Only managers'], 403);
+        }
+        if ($u->customer_id !== $playlist->customer_id) {
+            return response()->json(['message' => 'Out of scope'], 403);
+        }
+
+        $wasDefault = (bool) $playlist->is_default;
+        $customerId = (int) $playlist->customer_id;
 
         $playlist->delete();
-        return response()->json(['message'=>'Playlist deleted']);
+
+        if ($wasDefault) {
+            // Clear cached default so resolver won’t return a stale playlist.
+            $this->resolver->forgetCompanyDefault($customerId);
+            // Optional: broadcast to inform devices to fallback to waiting/other default.
+            event(new ScreenConfigUpdated($customerId, null, ''));
+        }
+
+        return response()->json(['message' => 'Playlist deleted']);
     }
 
-    // Publish: stamp published_at, refresh version, broadcast
+    /**
+     * POST /user/v1/playlists/{playlist}/publish
+     * Manager-only: set published_at=now, refresh content_version, broadcast.
+     */
     public function publish(Request $request, Playlist $playlist)
     {
         $u = $request->user();
-        if ($u->customer_id !== $playlist->customer_id) return response()->json(['message'=>'Out of scope'], 403);
-        if ($u->role !== 'manager') return response()->json(['message'=>'Only managers'], 403);
+        if ($u->role !== 'manager') {
+            return response()->json(['message' => 'Only managers'], 403);
+        }
+        if ($u->customer_id !== $playlist->customer_id) {
+            return response()->json(['message' => 'Out of scope'], 403);
+        }
 
         $playlist->published_at = now();
         $playlist->refreshVersion();
-        $this->broadcastForPlaylist($playlist);
 
-        return response()->json(['message'=>'Playlist published','playlist'=>$playlist->fresh()]);
+        // Broadcast to all screens in this company (explicit + default users).
+        event(new ScreenConfigUpdated($u->customer_id, null, $playlist->content_version ?? ''));
+
+        return response()->json(['message' => 'Playlist published', 'playlist' => $playlist->fresh()]);
     }
 
-    // Set as default for company
+    /**
+     * POST /user/v1/playlists/{playlist}/default
+     * Manager-only: make this the default playlist for the company.
+     */
     public function setDefault(Request $request, Playlist $playlist)
     {
         $u = $request->user();
-        if ($u->customer_id !== $playlist->customer_id) return response()->json(['message'=>'Out of scope'], 403);
-        if ($u->role !== 'manager') return response()->json(['message'=>'Only managers'], 403);
+        if ($u->role !== 'manager') {
+            return response()->json(['message' => 'Only managers'], 403);
+        }
+        if ($u->customer_id !== $playlist->customer_id) {
+            return response()->json(['message' => 'Out of scope'], 403);
+        }
 
-        Playlist::where('customer_id', $u->customer_id)->update(['is_default'=>false]);
+        Playlist::where('customer_id', $u->customer_id)->update(['is_default' => false]);
         $playlist->is_default = true;
         $playlist->save();
 
-        event(new \App\Events\ScreenConfigUpdated($u->customer_id, null, $playlist->content_version ?? ''));
-        return response()->json(['message'=>'Set as default','playlist'=>$playlist->fresh()]);
+        // Forget resolver cache + broadcast to all company screens.
+        $this->resolver->forgetCompanyDefault($u->customer_id);
+        event(new ScreenConfigUpdated($u->customer_id, null, $playlist->content_version ?? ''));
+
+        return response()->json(['message' => 'Set as default', 'playlist' => $playlist->fresh()]);
     }
 
-    // Recompute version & broadcast
+    /**
+     * POST /user/v1/playlists/{playlist}/refresh
+     * Manager-only: recompute content_version and broadcast.
+     */
     public function refreshVersion(Request $request, Playlist $playlist)
     {
         $u = $request->user();
-        if ($u->customer_id !== $playlist->customer_id) return response()->json(['message'=>'Out of scope'], 403);
-        if ($u->role !== 'manager') return response()->json(['message'=>'Only managers'], 403);
+        if ($u->role !== 'manager') {
+            return response()->json(['message' => 'Only managers'], 403);
+        }
+        if ($u->customer_id !== $playlist->customer_id) {
+            return response()->json(['message' => 'Out of scope'], 403);
+        }
 
         $playlist->refreshVersion();
-        $this->broadcastForPlaylist($playlist);
 
-        return response()->json(['message'=>'Version refreshed','content_version'=>$playlist->content_version]);
-    }
+        // Broadcast to all company screens (explicit + default users).
+        event(new ScreenConfigUpdated($u->customer_id, null, $playlist->content_version ?? ''));
 
-    protected function broadcastForPlaylist(Playlist $playlist): void
-    {
-        foreach ($playlist->screens()->pluck('id') as $sid) {
-            event(new \App\Events\ScreenConfigUpdated(
-                $playlist->customer_id, (int)$sid, $playlist->content_version ?? ''
-            ));
-        }
-        if ($playlist->is_default) {
-            event(new \App\Events\ScreenConfigUpdated($playlist->customer_id, null, $playlist->content_version ?? ''));
-        }
+        return response()->json(['message' => 'Version refreshed', 'content_version' => $playlist->content_version]);
     }
 }

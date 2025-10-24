@@ -104,10 +104,8 @@ Route::prefix('admin/v1')->as('admin.v1.')->middleware('force.json')->group(func
             Route::get('/screens',         [AdminScreenController::class, 'index'])->name('screens.index');
             Route::get('/screens/{screen}',[AdminScreenController::class, 'show'])->whereNumber('screen')->name('screens.show');
             /* CONTENT → Per-screen assign/refresh (GLOBAL) */
-            Route::patch('/screens/{screen}/playlist', [AdminScreenContentController::class, 'setPlaylist'])
-                ->whereNumber('screen')->name('screens.set_playlist');
-            Route::post('/screens/{screen}/refresh',   [AdminScreenContentController::class, 'refreshScreen'])
-                ->whereNumber('screen')->name('screens.refresh');
+            Route::patch('/screens/{screen}/playlist', [AdminScreenContentController::class, 'setPlaylist'])->whereNumber('screen')->name('screens.set_playlist');
+            Route::post('/screens/{screen}/refresh',   [AdminScreenContentController::class, 'refreshScreen'])->whereNumber('screen')->name('screens.refresh');
 
             /* CONTENT → BULK ops (GLOBAL) */
             Route::patch('/screens/playlist/all',                    [AdminContentBulkController::class, 'assignPlaylistToAllScreens'])->name('bulk.all.assign');
@@ -120,6 +118,9 @@ Route::prefix('admin/v1')->as('admin.v1.')->middleware('force.json')->group(func
             Route::get('/dashboard/summary',   [AdminDashboardController::class, 'summary'])->name('dashboard.summary');
             Route::get('/dashboard/screens',   [AdminDashboardController::class, 'screens'])->name('dashboard.screens');
             Route::get('/dashboard/customers', [AdminDashboardController::class, 'customers'])->name('dashboard.customers');
+            Route::get('/dashboard/metrics',           [AdminDashboardController::class, 'metrics'])->name('dashboard.metrics');
+            Route::get('/dashboard/licenses/expiring', [AdminDashboardController::class, 'licensesExpiring'])->name('dashboard.licenses.expiring');
+
         });
     });
 });
@@ -190,4 +191,5 @@ Route::prefix('screen/v1')->as('screen.v1.')->middleware('force.json')->group(fu
     Route::post('/register',  [ScreenController::class, 'register'])->name('register')->middleware('throttle:10,1');
     Route::post('/heartbeat', [ScreenController::class, 'heartbeat'])->name('heartbeat')->middleware('screen.auth','throttle:60,1');
     Route::get('/config',     [ScreenController::class, 'config'])->name('config')->middleware('screen.auth','throttle:60,1');
+    Route::get('/playlist',     [ScreenController::class, 'playlist'])->name('playlist')->middleware('screen.auth','throttle:60,1');
 });

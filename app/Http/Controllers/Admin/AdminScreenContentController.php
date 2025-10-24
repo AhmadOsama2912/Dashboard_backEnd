@@ -2,6 +2,7 @@
 // app/Http/Controllers/Admin/AdminScreenContentController.php
 namespace App\Http\Controllers\Admin;
 
+use App\Events\ScreenConfigUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\Playlist;
 use App\Models\Screen;
@@ -9,31 +10,49 @@ use Illuminate\Http\Request;
 
 class AdminScreenContentController extends Controller
 {
+    /**
+     * PATCH /admin/v1/screens/{screen}/playlist
+     * body: { playlist_id: int|null }
+     * Note: we DO NOT require screens.playlist_id column.
+     * We store the assignment under screens.meta->playlist_id.
+     */
     public function setPlaylist(Request $request, Screen $screen)
     {
         $data = $request->validate([
             'playlist_id' => ['nullable','integer','exists:playlists,id'],
         ]);
 
+        $meta = $screen->meta ?? [];
+
         if (!empty($data['playlist_id'])) {
             $pl = Playlist::findOrFail($data['playlist_id']);
-            // Safety: enforce tenant boundary
             if ($pl->customer_id !== $screen->customer_id) {
-                return response()->json(['message'=>'Playlist/customer mismatch'], 422);
+                return response()->json(['message' => 'Playlist/customer mismatch'], 422);
             }
-            $screen->playlist_id = $pl->id;
+            $meta['playlist_id'] = (int) $pl->id;
         } else {
-            $screen->playlist_id = null; // follow company default
+            unset($meta['playlist_id']); // follow company default
         }
+
+        $screen->meta = $meta;
         $screen->save();
 
-        event(new \App\Events\ScreenConfigUpdated($screen->customer_id, (int)$screen->id, $screen->playlist?->content_version ?? ''));
-        return response()->json(['message'=>'Screen playlist updated','screen_id'=>$screen->id,'playlist_id'=>$screen->playlist_id]);
+        event(new ScreenConfigUpdated($screen->customer_id, (int) $screen->id, $screen->playlist?->content_version ?? ''));
+
+        return response()->json([
+            'message'      => 'Screen playlist updated',
+            'screen_id'    => $screen->id,
+            'playlist_id'  => $meta['playlist_id'] ?? null,
+        ]);
     }
 
+    /**
+     * POST /admin/v1/screens/{screen}/refresh
+     * Asks device to pull latest config immediately.
+     */
     public function refreshScreen(Screen $screen)
     {
-        event(new \App\Events\ScreenConfigUpdated($screen->customer_id, (int)$screen->id, ''));
-        return response()->json(['message'=>'Refresh signal sent']);
+        event(new ScreenConfigUpdated($screen->customer_id, (int) $screen->id, ''));
+        return response()->json(['message' => 'Refresh signal sent']);
     }
 }
