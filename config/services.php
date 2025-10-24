@@ -31,4 +31,6 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'ws' => ['url' => env('WS_URL', 'http://127.0.0.1:8081')],
+
 ];

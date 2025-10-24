@@ -15,7 +15,8 @@ use App\Http\Controllers\Admin\AdminPlaylistItemController;    // Playlist items
 use App\Http\Controllers\Admin\AdminScreenContentController;   // Per-screen assign/refresh (global)
 use App\Http\Controllers\Admin\AdminContentBulkController;     // Bulk content ops (global)
 use App\Http\Controllers\Admin\AdminDashboardController;       // Admin dashboard APIs
-use App\Http\Controllers\Admin\AdminScreenController;         // Screens (global)
+use App\Http\Controllers\Admin\AdminScreenController;          // Screens (global)
+use App\Http\Controllers\Admin\PlaylistPushController;         // WS bump helper (admin)
 
 /* Tenant (manager/supervisor) */
 use App\Http\Controllers\User\UserTokenController;             // Login for manager/supervisor
@@ -103,6 +104,7 @@ Route::prefix('admin/v1')->as('admin.v1.')->middleware('force.json')->group(func
             /* Screens listing / details (for global admin) */
             Route::get('/screens',         [AdminScreenController::class, 'index'])->name('screens.index');
             Route::get('/screens/{screen}',[AdminScreenController::class, 'show'])->whereNumber('screen')->name('screens.show');
+
             /* CONTENT → Per-screen assign/refresh (GLOBAL) */
             Route::patch('/screens/{screen}/playlist', [AdminScreenContentController::class, 'setPlaylist'])->whereNumber('screen')->name('screens.set_playlist');
             Route::post('/screens/{screen}/refresh',   [AdminScreenContentController::class, 'refreshScreen'])->whereNumber('screen')->name('screens.refresh');
@@ -113,7 +115,7 @@ Route::prefix('admin/v1')->as('admin.v1.')->middleware('force.json')->group(func
             Route::patch('/screens/playlist',                        [AdminContentBulkController::class, 'assignPlaylistToScreens'])->name('bulk.screens.assign'); // body: screen_ids[]
             Route::post('/companies/{customer}/broadcast-config',    [AdminContentBulkController::class, 'broadcastCustomerConfig'])->whereNumber('customer')->name('bulk.company.broadcast');
             Route::post('/screens/broadcast-config',                 [AdminContentBulkController::class, 'broadcastScreensConfig'])->name('bulk.screens.broadcast'); // body: screen_ids[]
-        
+
             /* Admin Dashboard API's */
             Route::get('/dashboard/summary',   [AdminDashboardController::class, 'summary'])->name('dashboard.summary');
             Route::get('/dashboard/screens',   [AdminDashboardController::class, 'screens'])->name('dashboard.screens');
@@ -121,6 +123,9 @@ Route::prefix('admin/v1')->as('admin.v1.')->middleware('force.json')->group(func
             Route::get('/dashboard/metrics',           [AdminDashboardController::class, 'metrics'])->name('dashboard.metrics');
             Route::get('/dashboard/licenses/expiring', [AdminDashboardController::class, 'licensesExpiring'])->name('dashboard.licenses.expiring');
 
+            /* ===== Realtime push to screens (WS bump) ===== */
+            Route::post('/screens/{screen}/push', [PlaylistPushController::class, 'push'])
+                ->whereNumber('screen')->name('screens.push'); // يستخدم ScreenPushService ويرسل playlist.bump
         });
     });
 });
@@ -188,8 +193,41 @@ Route::prefix('user/v1')->as('user.v1.')->middleware('force.json')->group(functi
 /* =================================================================== */
 /* Note: 'screen.auth' authenticates device via X-Screen-Token header. */
 Route::prefix('screen/v1')->as('screen.v1.')->middleware('force.json')->group(function () {
-    Route::post('/register',  [ScreenController::class, 'register'])->name('register')->middleware('throttle:10,1');
-    Route::post('/heartbeat', [ScreenController::class, 'heartbeat'])->name('heartbeat')->middleware('screen.auth','throttle:60,1');
-    Route::get('/config',     [ScreenController::class, 'config'])->name('config')->middleware('screen.auth','throttle:60,1');
-    Route::get('/playlist',     [ScreenController::class, 'playlist'])->name('playlist')->middleware('screen.auth','throttle:60,1');
+    Route::post('/register',  [ScreenController::class, 'register'])
+        ->name('register')->middleware('throttle:10,1');
+
+    Route::post('/heartbeat', [ScreenController::class, 'heartbeat'])
+        ->name('heartbeat')->middleware('screen.auth','throttle:60,1');
+
+    Route::get('/config',     [ScreenController::class, 'config'])
+        ->name('config')->middleware('screen.auth','throttle:60,1');
+
+    // تأكد من وجود دالة public اسمها playlistJson في ScreenController
+    Route::get('/playlist',   [ScreenController::class, 'playlistJson'])
+        ->name('playlist')->middleware('screen.auth','throttle:60,1');
 });
+
+/* =================================================================== */
+/*                        WEBSOCKET HELPERS                            */
+/* =================================================================== */
+
+/* Resolve token -> screen room (للاستخدام من بوابة WS فقط) */
+Route::get('/ws/resolve', function (\Illuminate\Http\Request $request) {
+    $token = $request->query('token');
+    if (!$token) return response()->json(['ok'=>false,'error'=>'missing token'], 400);
+
+    $screen = \App\Models\Screen::select('id','customer_id')
+        ->where('api_token', $token)->first();
+
+    if (!$screen) return response()->json(['ok'=>false,'error'=>'invalid token'], 404);
+
+    return response()->json([
+        'ok' => true,
+        'screen' => ['id' => $screen->id, 'customer_id' => $screen->customer_id],
+    ]);
+});
+
+/* ممر سريع (اختياري) لدفع إشعار bump لشاشة محددة من الأدمن */
+Route::post('/admin/v1/screens/{screen}/push', [PlaylistPushController::class, 'push'])
+    ->whereNumber('screen')
+    ->middleware('force.json'); // يمكن نقلها داخل مجموعة admin/auth إذا رغبت

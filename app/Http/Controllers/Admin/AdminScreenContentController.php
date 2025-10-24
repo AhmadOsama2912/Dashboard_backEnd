@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Playlist;
 use App\Models\Screen;
 use Illuminate\Http\Request;
+use App\Services\ScreenPushService;
 
 class AdminScreenContentController extends Controller
 {
@@ -37,6 +38,14 @@ class AdminScreenContentController extends Controller
         $screen->meta = $meta;
         $screen->save();
 
+        try {
+        app(ScreenPushService::class)->bumpScreens([$screen->id], $playlist->content_version ?? null);
+        } catch (\Throwable $e) {
+            \Log::warning('WS push failed (setPlaylist)', [
+                'screen_id' => $screen->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
         event(new ScreenConfigUpdated($screen->customer_id, (int) $screen->id, $screen->playlist?->content_version ?? ''));
 
         return response()->json([
@@ -50,9 +59,20 @@ class AdminScreenContentController extends Controller
      * POST /admin/v1/screens/{screen}/refresh
      * Asks device to pull latest config immediately.
      */
-    public function refreshScreen(Screen $screen)
+    public function refreshScreen(\App\Models\Screen $screen)
     {
-        event(new ScreenConfigUpdated($screen->customer_id, (int) $screen->id, ''));
-        return response()->json(['message' => 'Refresh signal sent']);
+        try {
+            app(ScreenPushService::class)->bumpScreens([$screen->id], 'force');
+        } catch (\Throwable $e) {
+            \Log::warning('WS push failed (refreshScreen)', [
+                'screen_id' => $screen->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'pushed',
+            'screen_id' => $screen->id,
+        ]);
     }
 }
