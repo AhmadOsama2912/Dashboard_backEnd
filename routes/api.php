@@ -152,6 +152,12 @@ Route::prefix('user/v1')->as('user.v1.')->middleware('force.json')->group(functi
         /* Dashboard Summary (Manager or Supervisor in-scope) */
         Route::get('/dashboard/summary', [UserDashboardController::class, 'summary'])->name('dashboard.summary');
 
+        /* Additional metrics endpoint for dashboard charts
+         * Returns aggregated counts (screens, active, inactive, playlists, supervisors, media)
+         * This supplements the existing summary endpoint and is consumed by the user portal dashboard.
+         */
+        Route::get('/dashboard/metrics', [UserDashboardController::class, 'metrics'])->name('dashboard.metrics');
+
         /* Screens (Manager or Supervisor in-scope) */
         Route::get('/screens', [UserScreenController::class, 'index'])->name('screens.index');
         Route::get('/screens/{screen}', [UserScreenController::class, 'show'])->whereNumber('screen')->name('screens.show');
