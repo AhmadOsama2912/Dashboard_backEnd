@@ -25,6 +25,9 @@ use App\Http\Controllers\User\CompanyPlaylistController;       // Playlists (com
 use App\Http\Controllers\User\CompanyPlaylistItemController;   // Playlist items (company scope)
 use App\Http\Controllers\User\TenantScreenContentController;   // Per-screen assign/refresh (scoped)
 use App\Http\Controllers\User\TenantContentBulkController;     // Bulk content ops (scoped)
+use App\Http\Controllers\User\UserDashboardController;         // Tenant dashboard APIs
+use App\Http\Controllers\User\UserScreenController;            // Tenant screens
+use App\Http\Controllers\User\UserSupervisorController;        // Tenant supervisor management
 
 /* Device (screen) */
 use App\Http\Controllers\Screen\ScreenController;
@@ -145,6 +148,18 @@ Route::prefix('user/v1')->as('user.v1.')->middleware('force.json')->group(functi
         Route::get('/me',        [UserTokenController::class, 'me'])->name('auth.me');
         Route::post('/logout',   [UserTokenController::class, 'logout'])->name('auth.logout');
         Route::post('/logout-all',[UserTokenController::class, 'logoutAll'])->name('auth.logout_all');
+
+        /* Dashboard Summary (Manager or Supervisor in-scope) */
+        Route::get('/dashboard/summary', [UserDashboardController::class, 'summary'])->name('dashboard.summary');
+
+        /* Screens (Manager or Supervisor in-scope) */
+        Route::get('/screens', [UserScreenController::class, 'index'])->name('screens.index');
+        Route::get('/screens/{screen}', [UserScreenController::class, 'show'])->whereNumber('screen')->name('screens.show');
+
+        /* Supervisor Management (MANAGER ability) */
+        Route::middleware('abilities:user:manage')->group(function () {
+            Route::post('/supervisors', [UserSupervisorController::class, 'store'])->name('supervisors.store');
+        });
 
         /* Assign/unassign supervisor to screen (MANAGER ability) */
         Route::middleware('abilities:user:screens:assign')->group(function () {

@@ -30,4 +30,21 @@ class User extends Authenticatable
     // helpers
     public function isManager(): bool    { return $this->role === 'manager'; }
     public function isSupervisor(): bool { return $this->role === 'supervisor'; }
+
+    public function hasAbility(string $ability): bool
+    {
+        $abilities = match ($this->role) {
+            'manager' => [
+                'user:screens:view_all',
+                'user:playlists:manage',
+                'user:content:manage',
+            ],
+            'supervisor' => [
+                'user:screens:view_assigned',
+            ],
+            default => [],
+        };
+        return in_array($ability, $abilities);
+
+    }
 }

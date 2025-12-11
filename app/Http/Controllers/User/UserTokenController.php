@@ -65,6 +65,7 @@ class UserTokenController extends Controller
                 'user:playlist:write',      // (optional) if you let managers CRUD playlists/items
                 'user:playlist:items:write',
                 'user:playlist:reorder',
+                'user:manage',
             ]);
         }
 

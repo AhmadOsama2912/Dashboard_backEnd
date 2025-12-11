@@ -164,18 +164,75 @@ class ScreenController extends Controller
      */
     public function config(Request $request)
     {
-        /** @var Screen $screen */
+        // Prefer the middleware-injected screen (screen.auth). Fallback to header.
+        /** @var \App\Models\Screen|null $screen */
         $screen = $request->attributes->get('screen');
+        if (!$screen) {
+            $token = $request->header('X-Screen-Token') ?? $request->header('x-screen-token');
+            if ($token) {
+                $screen = Screen::where('api_token', $token)->first();
+            }
+        }
+        if (!$screen) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
 
-        [$version, $items] = $this->buildPlaylistForScreen($screen);
+        // ---- Resolve playlist for this screen ----
+        // 1) explicit assignment on screen
+        $playlist = null;
+        if (!empty($screen->playlist_id)) {
+            $playlist = Playlist::find($screen->playlist_id);
+        }
+
+        // 2) meta.playlist_id (if meta is JSON)
+        if (!$playlist) {
+            $meta = $screen->meta;
+            if (is_string($meta)) {
+                $meta = json_decode($meta, true) ?: [];
+            }
+            if (is_array($meta) && !empty($meta['playlist_id'])) {
+                $playlist = Playlist::find((int) $meta['playlist_id']);
+            }
+        }
+
+        // 3) company default playlist
+        if (!$playlist) {
+            $playlist = Playlist::where('customer_id', $screen->customer_id)
+                ->where('is_default', 1)
+                ->first();
+        }
+
+        // ---- Build response ----
+        $contentVersion = '';
+        $updatedAt      = now();
+        $items          = [];
+
+        if ($playlist) {
+            $contentVersion = (string) ($playlist->content_version ?? '');
+            $updatedAt      = $playlist->updated_at ?? now();
+
+            // Items belonging to this playlist
+            $items = PlaylistItem::where('playlist_id', $playlist->id)
+                ->orderBy('sort')
+                ->get()
+                ->map(function (PlaylistItem $it) {
+                    return [
+                        'type'         => $it->type,
+                        'url'          => $it->src,                 // DB column is 'src'
+                        'duration_sec' => (int) ($it->duration ?? 10), // DB column is 'duration'
+                    ];
+                })
+                ->toArray();
+        }
 
         return response()->json([
-            'content_version' => $version,
-            'updated_at'      => now()->toIso8601String(),
+            'content_version' => $contentVersion,
+            'updated_at'      => $updatedAt->toIso8601String(),
             'poll_after_sec'  => 60,
             'items'           => $items,
         ]);
     }
+
 
     /**
      * Public JSON for current playlist (used by TV app on bump)
