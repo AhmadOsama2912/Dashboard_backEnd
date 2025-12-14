@@ -16,7 +16,7 @@ class AdminSeeder extends Seeder
             [
                 'name' => 'Super Admin',
                 'username' => 'admin',
-                'password' => Hash::make('Test@12345'), // change me
+                'password' => Hash::make('Madar@2026'), // change me
                 'email_verified_at' => now(),
                 'remember_token' => Str::random(60),
                 'created_at' => now(),

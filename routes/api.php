@@ -163,9 +163,10 @@ Route::prefix('user/v1')->as('user.v1.')->middleware('force.json')->group(functi
         Route::get('/screens/{screen}', [UserScreenController::class, 'show'])->whereNumber('screen')->name('screens.show');
 
         /* Supervisor Management (MANAGER ability) */
-        Route::middleware('abilities:user:manage')->group(function () {
-            Route::post('/supervisors', [UserSupervisorController::class, 'store'])->name('supervisors.store');
-        });
+        Route::post('/supervisors', [UserSupervisorController::class, 'store'])->name('supervisors.store');
+        Route::get('/supervisors', [UserSupervisorController::class, 'index'])->name('supervisors.index');
+        Route::get('/supervisors/{id}', [UserSupervisorController::class, 'show'])->name('supervisors.show');
+        Route::put('/supervisors/{id}', [UserSupervisorController::class, 'update'])->name('supervisors.update');
 
         /* Assign/unassign supervisor to screen (MANAGER ability) */
         Route::middleware('abilities:user:screens:assign')->group(function () {

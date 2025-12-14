@@ -19,6 +19,7 @@ class CheckAbilities
     {
         $user = $request->user();
 
+        dd($user);
         // لازم يكون عامل login (auth:sanctum أو غيره قبله)
         if (!$user) {
             return response()->json([
