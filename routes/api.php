@@ -16,7 +16,7 @@ use App\Http\Controllers\Admin\AdminScreenContentController;   // Per-screen ass
 use App\Http\Controllers\Admin\AdminContentBulkController;     // Bulk content ops (global)
 use App\Http\Controllers\Admin\AdminDashboardController;       // Admin dashboard APIs
 use App\Http\Controllers\Admin\AdminScreenController;          // Screens (global)
-use App\Http\Controllers\Admin\PlaylistPushController;         // WS bump helper (admin)
+use App\Http\Controllers\PlaylistPushController;         // WS bump helper (admin)
 
 /* Tenant (manager/supervisor) */
 use App\Http\Controllers\User\UserTokenController;             // Login for manager/supervisor
