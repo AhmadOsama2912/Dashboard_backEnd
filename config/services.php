@@ -31,6 +31,11 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
-    'ws' => ['url' => env('WS_URL', 'http://127.0.0.1:8081')],
+    'ws' => [
+    'url'         => env('WS_URL', 'https://api.madar2030.com:8081'),
+    'push_secret' => env('WS_PUSH_SECRET'),
+    'timeout'     => (int) env('WS_TIMEOUT', 3),
+    ],
+
 
 ];
