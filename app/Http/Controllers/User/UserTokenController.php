@@ -42,29 +42,40 @@ class UserTokenController extends Controller
     public function login(Request $request)
     {
         $request->validate([
-            'login'    => ['required','string','max:190'], // email OR username
-            'password' => ['required','string'],
-            'device'   => ['nullable','string','max:100'],
+            'login'    => ['required', 'string', 'max:190'], // email OR username
+            'password' => ['required', 'string'],
+            'device'   => ['nullable', 'string', 'max:100'],
         ]);
 
-        $login = trim($request->login);
+        $login = trim((string) $request->input('login'));
+        $password = (string) $request->input('password');
+        $deviceName = (string) $request->input('device', 'user-api');
 
-        $candidates = filter_var($login, FILTER_VALIDATE_EMAIL)
-            ? User::where('email', $login)->get()
-            : User::where('username', $login)->get();
+        // Find candidates by email OR username
+        $query = User::query();
+
+        if (filter_var($login, FILTER_VALIDATE_EMAIL)) {
+            $query->where('email', $login);
+        } else {
+            $query->where('username', $login);
+        }
+
+        $candidates = $query->get();
 
         if ($candidates->isEmpty()) {
             throw ValidationException::withMessages(['login' => 'Invalid credentials.']);
         }
 
+        // Match password
         $matched = $candidates
-            ->filter(fn(User $u) => Hash::check($request->password, $u->password))
+            ->filter(fn (User $u) => Hash::check($password, (string) $u->password))
             ->values();
 
         if ($matched->isEmpty()) {
             throw ValidationException::withMessages(['login' => 'Invalid credentials.']);
         }
 
+        // Prevent ambiguous login across tenants
         if ($matched->count() > 1) {
             return response()->json([
                 'message' => 'Multiple accounts found for this login. Please contact support or use a unique login.',
@@ -74,6 +85,8 @@ class UserTokenController extends Controller
 
         /** @var User $user */
         $user = $matched->first();
+
+        // Ensure tenant/package is valid
         $user->loadMissing(['customer', 'customer.package']);
 
         if (!$user->customer || ($user->customer->deleted_at ?? null) !== null) {
@@ -87,28 +100,21 @@ class UserTokenController extends Controller
             return response()->json(['message' => 'Customer package is not available for login.'], 403);
         }
 
-        // Abilities (token abilities)
-        $abilities = ['user:screens:read'];
+        /**
+         * Abilities are derived from model policy:
+         * - role defaults + DB overrides + legacy mapping
+         */
+        $abilities = $user->effectiveAbilities();
+        $abilities = array_values(array_unique(array_map(
+            fn ($a) => strtolower(trim((string) $a)),
+            $abilities
+        )));
 
-        if ($user->role === 'manager') {
-            $abilities = array_merge($abilities, [
-                'user:screens:assign',
-                'user:screens:broadcast',
-                'user:playlist:write',
-                'user:playlist:items:write',
-                'user:playlist:reorder',
-                'user:manage',
-            ]);
-        }
+        // Optional (recommended for security): revoke previous tokens on login
+        // If you need multi-device tokens, remove this line.
+        $user->tokens()->delete();
 
-        if ($user->role === 'supervisor') {
-            $abilities = array_merge($abilities, [
-                'user:screens:assign',
-                'user:screens:broadcast',
-            ]);
-        }
-
-        $token = $user->createToken($request->input('device', 'user-api'), $abilities);
+        $token = $user->createToken($deviceName, $abilities);
 
         // telemetry
         $user->forceFill([

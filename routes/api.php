@@ -141,65 +141,109 @@ Route::prefix('user/v1')->as('user.v1.')->middleware('force.json')->group(functi
 
     /* --- Auth (token) ---------------------------------------------- */
     Route::post('/login', [UserTokenController::class, 'login'])
-        ->name('auth.login')->middleware('throttle:20,1');
+        ->name('auth.login')
+        ->middleware('throttle:20,1');
 
     Route::middleware('auth:sanctum')->group(function () {
 
         /* Self */
-        Route::get('/me',        [UserTokenController::class, 'me'])->name('auth.me');
-        Route::post('/logout',   [UserTokenController::class, 'logout'])->name('auth.logout');
-        Route::post('/logout-all',[UserTokenController::class, 'logoutAll'])->name('auth.logout_all');
+        Route::get('/me',          [UserTokenController::class, 'me'])->name('auth.me');
+        Route::post('/logout',     [UserTokenController::class, 'logout'])->name('auth.logout');
+        Route::post('/logout-all', [UserTokenController::class, 'logoutAll'])->name('auth.logout_all');
 
-        /* Dashboard Summary (Manager or Supervisor in-scope) */
-        Route::get('/dashboard/summary', [UserDashboardController::class, 'summary'])->name('dashboard.summary');
+        /* Dashboard Summary (ability-gated) */
+        Route::get('/dashboard/summary', [UserDashboardController::class, 'summary'])
+            ->name('dashboard.summary');
+            
+        Route::get('/dashboard/metrics', [UserDashboardController::class, 'metrics'])
+            ->name('dashboard.metrics');
 
-        /* Screens (Manager or Supervisor in-scope) */
-        Route::get('/screens', [UserScreenController::class, 'index'])->name('screens.index');
-        Route::get('/screens/{screen}', [UserScreenController::class, 'show'])->whereNumber('screen')->name('screens.show');
+        /* Screens (ability-gated) */
+        Route::get('/screens', [UserScreenController::class, 'index'])
+            ->name('screens.index');
 
-        /* Supervisor Management (MANAGER ability) */
-        Route::middleware('abilities:user:manage')->group(function () {
-            Route::post('/supervisors', [UserSupervisorController::class, 'store'])->name('supervisors.store');
-        });
+        Route::get('/screens/{screen}', [UserScreenController::class, 'show'])
+            ->whereNumber('screen')
+            ->name('screens.show');
 
-        /* Assign/unassign supervisor to screen (MANAGER ability) */
-        Route::middleware('abilities:user:screens:assign')->group(function () {
-            Route::patch('/screens/{screen}/assign',   [UserScreenAssignController::class, 'assign'])->whereNumber('screen')->name('screens.assign')->middleware('throttle:60,1');
-            Route::patch('/screens/{screen}/unassign', [UserScreenAssignController::class, 'unassign'])->whereNumber('screen')->name('screens.unassign')->middleware('throttle:60,1');
-        });
+        /* Supervisor Management (Manager only) */
 
-        /* CONTENT → Per-screen assign/refresh (Manager or Supervisor in-scope) */
+        Route::get('/supervisors', [UserSupervisorController::class, 'index'])->name('supervisors.index');
+        Route::post('/supervisorsx', [UserSupervisorController::class, 'store'])
+            ->name('supervisors.store');
+       
+
+        /* Assign/unassign supervisor to screen (Manager only) */
+
+            Route::patch('/screens/{screen}/assign', [UserScreenAssignController::class, 'assign'])
+                ->whereNumber('screen')
+                ->name('screens.assign')
+                ->middleware('throttle:60,1');
+
+            Route::patch('/screens/{screen}/unassign', [UserScreenAssignController::class, 'unassign'])
+                ->whereNumber('screen')
+                ->name('screens.unassign')
+                ->middleware('throttle:60,1');
+      
+
+        /* CONTENT → Per-screen assign/refresh */
         Route::patch('/screens/{screen}/playlist', [TenantScreenContentController::class, 'setPlaylist'])
-            ->whereNumber('screen')->name('screens.set_playlist')->middleware('abilities:user:screens:assign');
-        Route::post('/screens/{screen}/refresh',   [TenantScreenContentController::class, 'refreshScreen'])
-            ->whereNumber('screen')->name('screens.refresh')->middleware('abilities:user:screens:broadcast');
+            ->whereNumber('screen')
+            ->name('screens.set_playlist')
+            ->middleware('abilities:user:screens:assign');
 
-        /* CONTENT → BULK (Manager: company+selected; Supervisor: assigned+selected) */
+        Route::post('/screens/{screen}/refresh', [TenantScreenContentController::class, 'refreshScreen'])
+            ->whereNumber('screen')
+            ->name('screens.refresh')
+            ->middleware('abilities:user:screens:broadcast');
+
+        /* CONTENT → BULK */
         Route::middleware('abilities:user:screens:assign')->group(function () {
-            Route::patch('/company/screens/playlist', [TenantContentBulkController::class, 'assignPlaylistToCompanyScreens'])->name('bulk.company.assign'); // manager only inside controller
-            Route::patch('/screens/playlist',         [TenantContentBulkController::class, 'assignPlaylistToScreens'])->name('bulk.screens.assign');       // { all: true } or screen_ids[]
+            Route::patch('/company/screens/playlist', [TenantContentBulkController::class, 'assignPlaylistToCompanyScreens'])
+                ->name('bulk.company.assign');
+
+            Route::patch('/screens/playlist', [TenantContentBulkController::class, 'assignPlaylistToScreens'])
+                ->name('bulk.screens.assign');
         });
+
         Route::middleware('abilities:user:screens:broadcast')->group(function () {
-            Route::post('/company/broadcast-config', [TenantContentBulkController::class, 'broadcastCompanyConfig'])->name('bulk.company.broadcast');      // manager only inside controller
-            Route::post('/screens/broadcast-config', [TenantContentBulkController::class, 'broadcastScreensConfig'])->name('bulk.screens.broadcast');      // { all: true } or screen_ids[]
+            Route::post('/company/broadcast-config', [TenantContentBulkController::class, 'broadcastCompanyConfig'])
+                ->name('bulk.company.broadcast');
+
+            Route::post('/screens/broadcast-config', [TenantContentBulkController::class, 'broadcastScreensConfig'])
+                ->name('bulk.screens.broadcast');
         });
 
-        /* COMPANY Playlists (MANAGER only – guarded by ability) */
+        /* COMPANY Playlists (Manager ability) */
         Route::middleware('abilities:user:playlist:write')->group(function () {
-            Route::get('/playlists',               [CompanyPlaylistController::class, 'index'])->name('playlists.index');
-            Route::get('/playlists/{playlist}',    [CompanyPlaylistController::class, 'show'])->whereNumber('playlist')->name('playlists.show');
-            Route::post('/playlists',              [CompanyPlaylistController::class, 'store'])->name('playlists.store');
-            Route::patch('/playlists/{playlist}',  [CompanyPlaylistController::class, 'update'])->whereNumber('playlist')->name('playlists.update');
-            Route::delete('/playlists/{playlist}', [CompanyPlaylistController::class, 'destroy'])->whereNumber('playlist')->name('playlists.destroy');
 
-            Route::post('/playlists/{playlist}/publish', [CompanyPlaylistController::class, 'publish'])->whereNumber('playlist')->name('playlists.publish');
-            Route::post('/playlists/{playlist}/default', [CompanyPlaylistController::class, 'setDefault'])->whereNumber('playlist')->name('playlists.default');
-            Route::post('/playlists/{playlist}/refresh', [CompanyPlaylistController::class, 'refreshVersion'])->whereNumber('playlist')->name('playlists.refresh');
+            Route::get('/playlists',            [CompanyPlaylistController::class, 'index'])->name('playlists.index');
+            Route::get('/playlists/{playlist}', [CompanyPlaylistController::class, 'show'])->whereNumber('playlist')->name('playlists.show');
 
-            Route::post('/playlists/{playlist}/items',               [CompanyPlaylistItemController::class, 'store'])->whereNumber('playlist')->name('playlist_items.store');
-            Route::patch('/playlists/{playlist}/items/{item}',       [CompanyPlaylistItemController::class, 'update'])->whereNumber('playlist')->whereNumber('item')->name('playlist_items.update');
-            Route::delete('/playlists/{playlist}/items/{item}',      [CompanyPlaylistItemController::class, 'destroy'])->whereNumber('playlist')->whereNumber('item')->name('playlist_items.destroy');
-            Route::patch('/playlists/{playlist}/items/reorder',      [CompanyPlaylistItemController::class, 'reorder'])->whereNumber('playlist')->name('playlist_items.reorder');
+            Route::post('/playlists',             [CompanyPlaylistController::class, 'store'])->name('playlists.store');
+            Route::patch('/playlists/{playlist}', [CompanyPlaylistController::class, 'update'])->whereNumber('playlist')->name('playlists.update');
+            Route::delete('/playlists/{playlist}',[CompanyPlaylistController::class, 'destroy'])->whereNumber('playlist')->name('playlists.destroy');
+
+            Route::post('/playlists/{playlist}/publish', [CompanyPlaylistController::class, 'publish'])
+                ->whereNumber('playlist')->name('playlists.publish');
+
+            Route::post('/playlists/{playlist}/default', [CompanyPlaylistController::class, 'setDefault'])
+                ->whereNumber('playlist')->name('playlists.default');
+
+            Route::post('/playlists/{playlist}/refresh', [CompanyPlaylistController::class, 'refreshVersion'])
+                ->whereNumber('playlist')->name('playlists.refresh');
+
+            Route::post('/playlists/{playlist}/items', [CompanyPlaylistItemController::class, 'store'])
+                ->whereNumber('playlist')->name('playlist_items.store');
+
+            Route::patch('/playlists/{playlist}/items/{item}', [CompanyPlaylistItemController::class, 'update'])
+                ->whereNumber('playlist')->whereNumber('item')->name('playlist_items.update');
+
+            Route::delete('/playlists/{playlist}/items/{item}', [CompanyPlaylistItemController::class, 'destroy'])
+                ->whereNumber('playlist')->whereNumber('item')->name('playlist_items.destroy');
+
+            Route::patch('/playlists/{playlist}/items/reorder', [CompanyPlaylistItemController::class, 'reorder'])
+                ->whereNumber('playlist')->name('playlist_items.reorder');
         });
     });
 });
