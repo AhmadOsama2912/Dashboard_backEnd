@@ -61,7 +61,7 @@ class CompanyPlaylistItemController extends Controller
 		// IMAGE/VIDEO: upload via "file"
 		$data = $request->validate([
 			'type'     => ['required', Rule::in(['image','video'])],
-			'file'     => ['required', 'file', 'mimes:jpg,jpeg,png,webp,mp4,mov,m4v,webm', 'max:409600'], // 400MB (KB)
+			'file'     => ['required', 'file', 'mimes:jpg,jpeg,png,webp,mp4,mov,m4v,webm,heic', 'max:409600'], // 400MB (KB)
 			'duration' => ['nullable', 'integer', 'min:0', 'max:3600'], // Option A: allow 0
 			'loops'    => ['nullable', 'integer', 'min:1', 'max:100'],
 			'sort'     => ['nullable', 'integer', 'min:0'],
@@ -172,3 +172,4 @@ class CompanyPlaylistItemController extends Controller
         return response()->json(['message'=>'Items reordered']);
     }
 }
+

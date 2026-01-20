@@ -20,16 +20,19 @@ class AdminScreenContentController extends Controller
     public function setPlaylist(Request $request, Screen $screen)
     {
         $data = $request->validate([
-            'playlist_id' => ['nullable','integer','exists:playlists,id'],
+            'playlist_id' => ['nullable', 'integer', 'exists:playlists,id'],
         ]);
 
         $meta = $screen->meta ?? [];
+        $pl = null;
 
         if (!empty($data['playlist_id'])) {
             $pl = Playlist::findOrFail($data['playlist_id']);
+
             if ($pl->customer_id !== $screen->customer_id) {
                 return response()->json(['message' => 'Playlist/customer mismatch'], 422);
             }
+
             $meta['playlist_id'] = (int) $pl->id;
         } else {
             unset($meta['playlist_id']); // follow company default
@@ -38,22 +41,30 @@ class AdminScreenContentController extends Controller
         $screen->meta = $meta;
         $screen->save();
 
+        $contentVersion = $pl?->content_version;
+
         try {
-        app(ScreenPushService::class)->bumpScreens([$screen->id], $playlist->content_version ?? null);
+            app(ScreenPushService::class)->bumpScreens([(int) $screen->id], $contentVersion);
         } catch (\Throwable $e) {
             \Log::warning('WS push failed (setPlaylist)', [
                 'screen_id' => $screen->id,
                 'error' => $e->getMessage(),
             ]);
         }
-        event(new ScreenConfigUpdated($screen->customer_id, (int) $screen->id, $screen->playlist?->content_version ?? ''));
+
+        event(new ScreenConfigUpdated(
+            (int) $screen->customer_id,
+            (int) $screen->id,
+            (string) ($contentVersion ?? '')
+        ));
 
         return response()->json([
-            'message'      => 'Screen playlist updated',
-            'screen_id'    => $screen->id,
-            'playlist_id'  => $meta['playlist_id'] ?? null,
+            'message' => 'Screen playlist updated',
+            'screen_id' => (int) $screen->id,
+            'playlist_id' => $meta['playlist_id'] ?? null,
         ]);
     }
+
 
     /**
      * POST /admin/v1/screens/{screen}/refresh

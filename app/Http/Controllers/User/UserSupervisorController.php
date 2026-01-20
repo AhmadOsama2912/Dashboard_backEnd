@@ -157,4 +157,5 @@ class UserSupervisorController extends Controller
             'user'    => $supervisor,
         ], 201);
     }
+
 }

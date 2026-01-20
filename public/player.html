@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Madar Ads Player</title>
+  <style>
+    html, body { margin:0; padding:0; width:100%; height:100%; background:#000; overflow:hidden; }
+    video { width:100vw; height:100vh; object-fit:cover; background:#000; }
+  </style>
+</head>
+<body>
+  <video id="v" muted playsinline webkit-playsinline></video>
+
+  <script>
+    const playlist = [
+      "https://api.madar2030.com/storage/media/customer_1/f1e2168e-1d12-461f-b6f1-2c8a353ca1d5.mp4",
+      // add more videos here...
+      // "https://api.madar2030.com/storage/media/customer_1/xxxx.mp4",
+    ];
+
+    let i = 0;
+    const v = document.getElementById("v");
+
+    function playIndex(idx) {
+      i = idx % playlist.length;
+      v.src = playlist[i];
+      v.load();
+
+      const tryPlay = () => v.play().catch(() => setTimeout(tryPlay, 500));
+      tryPlay();
+    }
+
+    v.addEventListener("ended", () => playIndex(i + 1));
+    v.addEventListener("error", () => playIndex(i + 1));   // skip broken video
+    v.addEventListener("stalled", () => playIndex(i + 1)); // skip if stuck
+
+    // Autoplay start
+    playIndex(0);
+
+    // Watchdog: if paused for any reason, resume
+    setInterval(() => { if (v.paused) v.play().catch(()=>{}); }, 2000);
+  </script>
+</body>
+</html>

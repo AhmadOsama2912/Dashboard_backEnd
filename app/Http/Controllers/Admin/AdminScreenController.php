@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
 
 class AdminScreenController extends Controller
 {
-/** GET /admin/v1/screens */
+    /** GET /admin/v1/screens */
 public function index(Request $request)
     {
         $payload = $request->validate([
@@ -84,36 +84,24 @@ public function index(Request $request)
         return response()->json($page);
     }
 
-/** GET /admin/v1/screens/{screen} */
-public function show(Screen $screen)
-{
-    $screen->load('customer:id,name');
+    /** GET /admin/v1/screens/{screen} */
+    public function show(Screen $screen)
+    {
+        $screen->load('customer:id,name');
 
-    $playlistId = is_array($screen->meta ?? null) ? ($screen->meta['playlist_id'] ?? null) : null;
+        $playlistId = is_array($screen->meta ?? null) ? ($screen->meta['playlist_id'] ?? null) : null;
 
-    return response()->json([
-        'id'               => $screen->id,
-        'customer_id'      => $screen->customer_id,
-        'customer_name'    => optional($screen->customer)->name,
-        'serial_number'    => $screen->serial_number,
-        'device_model'     => $screen->device_model,
-        'os_version'       => $screen->os_version,
-        'app_version'      => $screen->app_version,
-        'playlist_id'      => $playlistId,
-        'last_check_in_at' => optional($screen->last_check_in_at)->toIso8601String(),
-        'created_at'       => optional($screen->created_at)->toIso8601String(),
-    ]);
-}
-
-public function delete(Request $request)
-{
-    $request->validate([
-        'ids' => ['required','array','min:1'],
-        'ids.*' => ['required','integer','exists:screens,id'],
-    ]);
-
-    $deletedCount = Screen::whereIn('id', $request->input('ids'))->delete();
-
-    return response()->json(['message' => "$deletedCount screens deleted."]);
-}
+        return response()->json([
+            'id'               => $screen->id,
+            'customer_id'      => $screen->customer_id,
+            'customer_name'    => optional($screen->customer)->name,
+            'serial_number'    => $screen->serial_number,
+            'device_model'     => $screen->device_model,
+            'os_version'       => $screen->os_version,
+            'app_version'      => $screen->app_version,
+            'playlist_id'      => $playlistId,
+            'last_check_in_at' => optional($screen->last_check_in_at)->toIso8601String(),
+            'created_at'       => optional($screen->created_at)->toIso8601String(),
+        ]);
+    }
 }

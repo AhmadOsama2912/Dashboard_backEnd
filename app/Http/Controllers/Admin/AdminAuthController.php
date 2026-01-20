@@ -26,7 +26,6 @@ class AdminAuthController extends Controller
         if (!$admin || !Hash::check($request->password, $admin->password)) {
             throw ValidationException::withMessages(['login' => 'Invalid credentials.']);
         }
-
         $admin->forceFill([
             'last_login_at' => now(),
             'last_login_ip' => $request->ip(),

@@ -153,28 +153,30 @@ Route::prefix('user/v1')->as('user.v1.')->middleware('force.json')->group(functi
 
         /* Dashboard Summary (ability-gated) */
         Route::get('/dashboard/summary', [UserDashboardController::class, 'summary'])
-            ->name('dashboard.summary');
-            
-        Route::get('/dashboard/metrics', [UserDashboardController::class, 'metrics'])
-            ->name('dashboard.metrics');
+            ->name('dashboard.summary')
+            ->middleware('abilities:user:dashboard:read');
+		Route::get('/dashboard/metrics', [UserDashboardController::class, 'metrics'])
+            ->name('dashboard.metrics');	
 
         /* Screens (ability-gated) */
         Route::get('/screens', [UserScreenController::class, 'index'])
-            ->name('screens.index');
+            ->name('screens.index')
+            ->middleware('abilities:user:screens:read');
 
         Route::get('/screens/{screen}', [UserScreenController::class, 'show'])
             ->whereNumber('screen')
-            ->name('screens.show');
+            ->name('screens.show')
+            ->middleware('abilities:user:screens:read');
 
         /* Supervisor Management (Manager only) */
-
-        Route::get('/supervisors', [UserSupervisorController::class, 'index'])->name('supervisors.index');
-        Route::post('/supervisorsx', [UserSupervisorController::class, 'store'])
-            ->name('supervisors.store');
-       
+        Route::middleware('abilities:user:manage')->group(function () {
+			Route::get('/supervisors', [UserSupervisorController::class, 'index'])->name('supervisors.index');
+            Route::post('/supervisorsx', [UserSupervisorController::class, 'store'])
+                ->name('supervisors.store');
+        });
 
         /* Assign/unassign supervisor to screen (Manager only) */
-
+        Route::middleware('abilities:user:screens:assign')->group(function () {
             Route::patch('/screens/{screen}/assign', [UserScreenAssignController::class, 'assign'])
                 ->whereNumber('screen')
                 ->name('screens.assign')
@@ -184,7 +186,7 @@ Route::prefix('user/v1')->as('user.v1.')->middleware('force.json')->group(functi
                 ->whereNumber('screen')
                 ->name('screens.unassign')
                 ->middleware('throttle:60,1');
-      
+        });
 
         /* CONTENT → Per-screen assign/refresh */
         Route::patch('/screens/{screen}/playlist', [TenantScreenContentController::class, 'setPlaylist'])
