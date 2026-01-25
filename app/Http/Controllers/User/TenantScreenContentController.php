@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Playlist;
 use App\Models\Screen;
 use Illuminate\Http\Request;
+use App\Events\ScreenConfigUpdated;
 
 class TenantScreenContentController extends Controller
 {

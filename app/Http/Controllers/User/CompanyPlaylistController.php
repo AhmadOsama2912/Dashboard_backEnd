@@ -23,9 +23,6 @@ class CompanyPlaylistController extends Controller
     public function index(Request $request)
     {
         $u = $request->user();
-        if ($u->role !== 'manager') {
-            return response()->json(['message' => 'Only managers'], 403);
-        }
 
         $data = $request->validate([
             'q'        => ['nullable', 'string', 'max:190'],
@@ -50,9 +47,7 @@ class CompanyPlaylistController extends Controller
     public function show(Request $request, Playlist $playlist)
     {
         $u = $request->user();
-        if ($u->role !== 'manager') {
-            return response()->json(['message' => 'Only managers'], 403);
-        }
+
         if ($u->customer_id !== $playlist->customer_id) {
             return response()->json(['message' => 'Out of scope'], 403);
         }
@@ -69,9 +64,7 @@ class CompanyPlaylistController extends Controller
     public function store(Request $request)
     {
         $u = $request->user();
-        if ($u->role !== 'manager') {
-            return response()->json(['message' => 'Only managers'], 403);
-        }
+
 
         $data = $request->validate([
             'name'         => ['required', 'string', 'max:190'],
@@ -109,9 +102,7 @@ class CompanyPlaylistController extends Controller
     public function update(Request $request, Playlist $playlist)
     {
         $u = $request->user();
-        if ($u->role !== 'manager') {
-            return response()->json(['message' => 'Only managers'], 403);
-        }
+
         if ($u->customer_id !== $playlist->customer_id) {
             return response()->json(['message' => 'Out of scope'], 403);
         }
@@ -145,9 +136,7 @@ class CompanyPlaylistController extends Controller
     public function destroy(Request $request, Playlist $playlist)
     {
         $u = $request->user();
-        if ($u->role !== 'manager') {
-            return response()->json(['message' => 'Only managers'], 403);
-        }
+
         if ($u->customer_id !== $playlist->customer_id) {
             return response()->json(['message' => 'Out of scope'], 403);
         }
@@ -174,9 +163,7 @@ class CompanyPlaylistController extends Controller
     public function publish(Request $request, Playlist $playlist)
     {
         $u = $request->user();
-        if ($u->role !== 'manager') {
-            return response()->json(['message' => 'Only managers'], 403);
-        }
+
         if ($u->customer_id !== $playlist->customer_id) {
             return response()->json(['message' => 'Out of scope'], 403);
         }
@@ -197,9 +184,7 @@ class CompanyPlaylistController extends Controller
     public function setDefault(Request $request, Playlist $playlist)
     {
         $u = $request->user();
-        if ($u->role !== 'manager') {
-            return response()->json(['message' => 'Only managers'], 403);
-        }
+
         if ($u->customer_id !== $playlist->customer_id) {
             return response()->json(['message' => 'Out of scope'], 403);
         }
@@ -222,9 +207,7 @@ class CompanyPlaylistController extends Controller
     public function refreshVersion(Request $request, Playlist $playlist)
     {
         $u = $request->user();
-        if ($u->role !== 'manager') {
-            return response()->json(['message' => 'Only managers'], 403);
-        }
+
         if ($u->customer_id !== $playlist->customer_id) {
             return response()->json(['message' => 'Out of scope'], 403);
         }

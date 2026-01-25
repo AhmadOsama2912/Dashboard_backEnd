@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Schema;
 class AdminScreenController extends Controller
 {
     /** GET /admin/v1/screens */
-public function index(Request $request)
+    public function index(Request $request)
     {
         $payload = $request->validate([
             'q'           => ['nullable','string','max:190'],
@@ -102,6 +102,24 @@ public function index(Request $request)
             'playlist_id'      => $playlistId,
             'last_check_in_at' => optional($screen->last_check_in_at)->toIso8601String(),
             'created_at'       => optional($screen->created_at)->toIso8601String(),
+        ]);
+    }
+
+    public function destroy(Request $request)
+    {
+
+        // dd('delete screens', $request->all());
+
+        $payload = $request->validate([
+            'screen_ids' => ['required', 'array', 'min:1'],
+            'screen_ids.*' => ['integer', 'exists:screens,id'],
+        ]);
+
+        $deleted = Screen::whereIn('id', $payload['screen_ids'])->delete();
+
+        return response()->json([
+            'message' => "Deleted {$deleted} screen(s) successfully.",
+            'deleted_count' => $deleted,
         ]);
     }
 }

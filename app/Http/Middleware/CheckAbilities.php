@@ -8,18 +8,22 @@ use Symfony\Component\HttpFoundation\Response;
 
 class CheckAbilities
 {
-    public function handle(Request $request, Closure $next, ...$abilities): Response
+    public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
 
-        // if (!$user) {
-        //     return response()->json(['message' => 'Unauthenticated.'], 401);
-        // }
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
 
-        // // Manager => allow everything (bypass ability checks)
-        // if (($user->role ?? null) === 'manager' || (method_exists($user, 'isManager') && $user->isManager())) {
-        //     return $next($request);
-        // }
+        // Manager => allow everything (bypass ability checks)
+        if (($user->role ?? null) === 'manager' || (method_exists($user, 'isManager') && $user->isManager())) {
+            return $next($request);
+        }
+
+        if (($user-> role ?? null) !== 'supervisor' && !(method_exists($user, 'isSupervisor') && $user->isSupervisor())) {
+            return response()->json(['message' => 'Forbidden. Invalid role.'], 403);
+        }
 
         // // If no abilities required, allow
         // if (empty($abilities)) {

@@ -2,7 +2,6 @@
 
 use Illuminate\Support\Facades\Route;
 
-/* ==============================  USES  ============================== */
 /* Admin domain */
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminUserController;            // System admins (staff)
@@ -16,7 +15,7 @@ use App\Http\Controllers\Admin\AdminScreenContentController;   // Per-screen ass
 use App\Http\Controllers\Admin\AdminContentBulkController;     // Bulk content ops (global)
 use App\Http\Controllers\Admin\AdminDashboardController;       // Admin dashboard APIs
 use App\Http\Controllers\Admin\AdminScreenController;          // Screens (global)
-use App\Http\Controllers\Admin\PlaylistPushController;         // WS bump helper (admin)
+use App\Http\Controllers\PlaylistPushController;         // WS bump helper (admin)
 
 /* Tenant (manager/supervisor) */
 use App\Http\Controllers\User\UserTokenController;             // Login for manager/supervisor
@@ -28,6 +27,7 @@ use App\Http\Controllers\User\TenantContentBulkController;     // Bulk content o
 use App\Http\Controllers\User\UserDashboardController;         // Tenant dashboard APIs
 use App\Http\Controllers\User\UserScreenController;            // Tenant screens
 use App\Http\Controllers\User\UserSupervisorController;        // Tenant supervisor management
+
 
 /* Device (screen) */
 use App\Http\Controllers\Screen\ScreenController;
@@ -50,8 +50,7 @@ Route::prefix('admin/v1')->as('admin.v1.')->middleware('force.json')->group(func
         Route::post('/logout',   [AdminAuthController::class, 'logout'])->name('auth.logout');
         Route::post('/logout-all',[AdminAuthController::class, 'logoutAll'])->name('auth.logout_all');
 
-        /* ---- Requires ability: admin:manage ------------------------ */
-        Route::middleware('abilities:admin:manage')->group(function () {
+
 
             /* ========== System Admins (staff) ========== */
             Route::get('/admins',            [AdminUserController::class, 'index'])->name('admins.index')->middleware('throttle:120,1');
@@ -107,7 +106,7 @@ Route::prefix('admin/v1')->as('admin.v1.')->middleware('force.json')->group(func
             /* Screens listing / details (for global admin) */
             Route::get('/screens',         [AdminScreenController::class, 'index'])->name('screens.index');
             Route::get('/screens/{screen}',[AdminScreenController::class, 'show'])->whereNumber('screen')->name('screens.show');
-            Route::delete('/screens',      [AdminScreenController::class, 'delete'])->name('screens.delete'); // body: screen_ids[]
+            Route::delete('/screens',      [AdminScreenController::class, 'destroy'])->name('screens.destroy'); // body: screen_ids[]
 
             /* CONTENT → Per-screen assign/refresh (GLOBAL) */
             Route::patch('/screens/{screen}/playlist', [AdminScreenContentController::class, 'setPlaylist'])->whereNumber('screen')->name('screens.set_playlist');
@@ -130,125 +129,142 @@ Route::prefix('admin/v1')->as('admin.v1.')->middleware('force.json')->group(func
             /* ===== Realtime push to screens (WS bump) ===== */
             Route::post('/screens/{screen}/push', [PlaylistPushController::class, 'push'])
                 ->whereNumber('screen')->name('screens.push'); // يستخدم ScreenPushService ويرسل playlist.bump
-        });
+        
     });
 });
 
 /* =================================================================== */
 /*                        TENANT USERS API (v1)                        */
 /* =================================================================== */
-Route::prefix('user/v1')->as('user.v1.')->middleware('force.json')->group(function () {
 
-    /* --- Auth (token) ---------------------------------------------- */
-    Route::post('/login', [UserTokenController::class, 'login'])
-        ->name('auth.login')
-        ->middleware('throttle:20,1');
+Route::prefix('user/v1')
+    ->as('user.v1.')
+    ->middleware('force.json')
+    ->group(function () {
 
-    Route::middleware('auth:sanctum')->group(function () {
+        /* --- Auth (token) ---------------------------------------------- */
+        Route::post('/login', [UserTokenController::class, 'login'])
+            ->name('auth.login')
+            ->middleware('throttle:20,1');
 
-        /* Self */
-        Route::get('/me',          [UserTokenController::class, 'me'])->name('auth.me');
-        Route::post('/logout',     [UserTokenController::class, 'logout'])->name('auth.logout');
-        Route::post('/logout-all', [UserTokenController::class, 'logoutAll'])->name('auth.logout_all');
+        /* --- Protected (must be authenticated + real user) ------------- */
+        Route::middleware(['auth:sanctum', 'api.user'])->group(function () {
 
-        /* Dashboard Summary (ability-gated) */
-        Route::get('/dashboard/summary', [UserDashboardController::class, 'summary'])
-            ->name('dashboard.summary')
-            ->middleware('abilities:user:dashboard:read');
-		Route::get('/dashboard/metrics', [UserDashboardController::class, 'metrics'])
-            ->name('dashboard.metrics');	
+            /* Self */
+            Route::get('/me',          [UserTokenController::class, 'me'])->name('auth.me');
+            Route::post('/logout',     [UserTokenController::class, 'logout'])->name('auth.logout');
+            Route::post('/logout-all', [UserTokenController::class, 'logoutAll'])->name('auth.logout_all');
 
-        /* Screens (ability-gated) */
-        Route::get('/screens', [UserScreenController::class, 'index'])
-            ->name('screens.index')
-            ->middleware('abilities:user:screens:read');
+            /* Dashboard */
+            Route::get('/dashboard/summary', [UserDashboardController::class, 'summary'])
+                ->name('dashboard.summary');
 
-        Route::get('/screens/{screen}', [UserScreenController::class, 'show'])
-            ->whereNumber('screen')
-            ->name('screens.show')
-            ->middleware('abilities:user:screens:read');
+            Route::get('/dashboard/metrics', [UserDashboardController::class, 'metrics'])
+                ->name('dashboard.metrics');
 
-        /* Supervisor Management (Manager only) */
-        Route::middleware('abilities:user:manage')->group(function () {
-			Route::get('/supervisors', [UserSupervisorController::class, 'index'])->name('supervisors.index');
-            Route::post('/supervisorsx', [UserSupervisorController::class, 'store'])
-                ->name('supervisors.store');
-        });
+            /* Screens (read) */
+            Route::get('/screens', [UserScreenController::class, 'index'])
+                ->name('screens.index');
 
-        /* Assign/unassign supervisor to screen (Manager only) */
-        Route::middleware('abilities:user:screens:assign')->group(function () {
-            Route::patch('/screens/{screen}/assign', [UserScreenAssignController::class, 'assign'])
+            Route::get('/screens/{screen}', [UserScreenController::class, 'show'])
                 ->whereNumber('screen')
-                ->name('screens.assign')
-                ->middleware('throttle:60,1');
+                ->name('screens.show');
 
-            Route::patch('/screens/{screen}/unassign', [UserScreenAssignController::class, 'unassign'])
-                ->whereNumber('screen')
-                ->name('screens.unassign')
-                ->middleware('throttle:60,1');
-        });
+            /* ---------------- Manager-only APIs ---------------- */
 
-        /* CONTENT → Per-screen assign/refresh */
-        Route::patch('/screens/{screen}/playlist', [TenantScreenContentController::class, 'setPlaylist'])
-            ->whereNumber('screen')
-            ->name('screens.set_playlist')
-            ->middleware('abilities:user:screens:assign');
+            
 
-        Route::post('/screens/{screen}/refresh', [TenantScreenContentController::class, 'refreshScreen'])
-            ->whereNumber('screen')
-            ->name('screens.refresh')
-            ->middleware('abilities:user:screens:broadcast');
+                /* Supervisor Management */
+                Route::get('/supervisors', [UserSupervisorController::class, 'index'])
+                    ->name('supervisors.index')->middleware('user.manager');
 
-        /* CONTENT → BULK */
-        Route::middleware('abilities:user:screens:assign')->group(function () {
-            Route::patch('/company/screens/playlist', [TenantContentBulkController::class, 'assignPlaylistToCompanyScreens'])
-                ->name('bulk.company.assign');
+                Route::post('/supervisors', [UserSupervisorController::class, 'store'])
+                    ->name('supervisors.store')->middleware('user.manager');
+            
+                /* Assign/unassign supervisor to screen */
+                Route::patch('/screens/{screen}/assign', [UserScreenAssignController::class, 'assign'])
+                    ->whereNumber('screen')
+                    ->name('screens.assign')
+                    ->middleware('throttle:60,1');
 
-            Route::patch('/screens/playlist', [TenantContentBulkController::class, 'assignPlaylistToScreens'])
-                ->name('bulk.screens.assign');
-        });
+                Route::patch('/screens/{screen}/unassign', [UserScreenAssignController::class, 'unassign'])
+                    ->whereNumber('screen')
+                    ->name('screens.unassign')
+                    ->middleware('throttle:60,1');
 
-        Route::middleware('abilities:user:screens:broadcast')->group(function () {
-            Route::post('/company/broadcast-config', [TenantContentBulkController::class, 'broadcastCompanyConfig'])
-                ->name('bulk.company.broadcast');
+                /* CONTENT → Per-screen assign/refresh */
+                Route::patch('/screens/{screen}/playlist', [TenantScreenContentController::class, 'setPlaylist'])
+                    ->whereNumber('screen')
+                    ->name('screens.set_playlist');
 
-            Route::post('/screens/broadcast-config', [TenantContentBulkController::class, 'broadcastScreensConfig'])
-                ->name('bulk.screens.broadcast');
-        });
+                Route::post('/screens/{screen}/refresh', [TenantScreenContentController::class, 'refreshScreen'])
+                    ->whereNumber('screen')
+                    ->name('screens.refresh');
 
-        /* COMPANY Playlists (Manager ability) */
-        Route::middleware('abilities:user:playlist:write')->group(function () {
+                /* CONTENT → BULK */
+                Route::patch('/company/screens/playlist', [TenantContentBulkController::class, 'assignPlaylistToCompanyScreens'])
+                    ->name('bulk.company.assign');
 
-            Route::get('/playlists',            [CompanyPlaylistController::class, 'index'])->name('playlists.index');
-            Route::get('/playlists/{playlist}', [CompanyPlaylistController::class, 'show'])->whereNumber('playlist')->name('playlists.show');
+                Route::patch('/screens/playlist', [TenantContentBulkController::class, 'assignPlaylistToScreens'])
+                    ->name('bulk.screens.assign');
 
-            Route::post('/playlists',             [CompanyPlaylistController::class, 'store'])->name('playlists.store');
-            Route::patch('/playlists/{playlist}', [CompanyPlaylistController::class, 'update'])->whereNumber('playlist')->name('playlists.update');
-            Route::delete('/playlists/{playlist}',[CompanyPlaylistController::class, 'destroy'])->whereNumber('playlist')->name('playlists.destroy');
+                Route::post('/company/broadcast-config', [TenantContentBulkController::class, 'broadcastCompanyConfig'])
+                    ->name('bulk.company.broadcast');
 
-            Route::post('/playlists/{playlist}/publish', [CompanyPlaylistController::class, 'publish'])
-                ->whereNumber('playlist')->name('playlists.publish');
+                Route::post('/screens/broadcast-config', [TenantContentBulkController::class, 'broadcastScreensConfig'])
+                    ->name('bulk.screens.broadcast');
 
-            Route::post('/playlists/{playlist}/default', [CompanyPlaylistController::class, 'setDefault'])
-                ->whereNumber('playlist')->name('playlists.default');
+                /* COMPANY Playlists (Manager only) */
+                Route::get('/playlists', [CompanyPlaylistController::class, 'index'])
+                    ->name('playlists.index');
 
-            Route::post('/playlists/{playlist}/refresh', [CompanyPlaylistController::class, 'refreshVersion'])
-                ->whereNumber('playlist')->name('playlists.refresh');
+                Route::get('/playlists/{playlist}', [CompanyPlaylistController::class, 'show'])
+                    ->whereNumber('playlist')
+                    ->name('playlists.show');
 
-            Route::post('/playlists/{playlist}/items', [CompanyPlaylistItemController::class, 'store'])
-                ->whereNumber('playlist')->name('playlist_items.store');
+                Route::post('/playlists', [CompanyPlaylistController::class, 'store'])
+                    ->name('playlists.store');
 
-            Route::patch('/playlists/{playlist}/items/{item}', [CompanyPlaylistItemController::class, 'update'])
-                ->whereNumber('playlist')->whereNumber('item')->name('playlist_items.update');
+                Route::patch('/playlists/{playlist}', [CompanyPlaylistController::class, 'update'])
+                    ->whereNumber('playlist')
+                    ->name('playlists.update');
 
-            Route::delete('/playlists/{playlist}/items/{item}', [CompanyPlaylistItemController::class, 'destroy'])
-                ->whereNumber('playlist')->whereNumber('item')->name('playlist_items.destroy');
+                Route::delete('/playlists/{playlist}', [CompanyPlaylistController::class, 'destroy'])
+                    ->whereNumber('playlist')
+                    ->name('playlists.destroy');
 
-            Route::patch('/playlists/{playlist}/items/reorder', [CompanyPlaylistItemController::class, 'reorder'])
-                ->whereNumber('playlist')->name('playlist_items.reorder');
+                Route::post('/playlists/{playlist}/publish', [CompanyPlaylistController::class, 'publish'])
+                    ->whereNumber('playlist')
+                    ->name('playlists.publish');
+
+                Route::post('/playlists/{playlist}/default', [CompanyPlaylistController::class, 'setDefault'])
+                    ->whereNumber('playlist')
+                    ->name('playlists.default');
+
+                Route::post('/playlists/{playlist}/refresh', [CompanyPlaylistController::class, 'refreshVersion'])
+                    ->whereNumber('playlist')
+                    ->name('playlists.refresh');
+
+                Route::post('/playlists/{playlist}/items', [CompanyPlaylistItemController::class, 'store'])
+                    ->whereNumber('playlist')
+                    ->name('playlist_items.store');
+
+                Route::patch('/playlists/{playlist}/items/{item}', [CompanyPlaylistItemController::class, 'update'])
+                    ->whereNumber('playlist')
+                    ->whereNumber('item')
+                    ->name('playlist_items.update');
+
+                Route::delete('/playlists/{playlist}/items/{item}', [CompanyPlaylistItemController::class, 'destroy'])
+                    ->whereNumber('playlist')
+                    ->whereNumber('item')
+                    ->name('playlist_items.destroy');
+
+                Route::patch('/playlists/{playlist}/items/reorder', [CompanyPlaylistItemController::class, 'reorder'])
+                    ->whereNumber('playlist')
+                    ->name('playlist_items.reorder');
+            
         });
     });
-});
 
 /* =================================================================== */
 /*                          DEVICE API (v1)                            */

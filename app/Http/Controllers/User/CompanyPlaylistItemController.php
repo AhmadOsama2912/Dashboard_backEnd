@@ -18,9 +18,6 @@ class CompanyPlaylistItemController extends Controller
 	{
 		$u = $request->user();
 
-		if ($u->role !== 'manager') {
-			return response()->json(['message' => 'Only managers'], 403);
-		}
 
 		if ((int) $u->customer_id !== (int) $playlist->customer_id) {
 			return response()->json(['message' => 'Out of scope'], 403);
@@ -107,7 +104,7 @@ class CompanyPlaylistItemController extends Controller
     public function update(Request $request, Playlist $playlist, PlaylistItem $item)
     {
         $u = $request->user();
-        if ($u->role !== 'manager') return response()->json(['message'=>'Only managers'], 403);
+        
         if ($u->customer_id !== $playlist->customer_id) return response()->json(['message'=>'Out of scope'], 403);
         if ($item->playlist_id !== $playlist->id) return response()->json(['message'=>'Item not in this playlist'], 422);
 
@@ -132,7 +129,7 @@ class CompanyPlaylistItemController extends Controller
     public function destroy(Request $request, Playlist $playlist, PlaylistItem $item)
     {
         $u = $request->user();
-        if ($u->role !== 'manager') return response()->json(['message'=>'Only managers'], 403);
+        
         if ($u->customer_id !== $playlist->customer_id) return response()->json(['message'=>'Out of scope'], 403);
         if ($item->playlist_id !== $playlist->id) return response()->json(['message'=>'Item not in this playlist'], 422);
 
@@ -148,7 +145,7 @@ class CompanyPlaylistItemController extends Controller
     public function reorder(Request $request, Playlist $playlist)
     {
         $u = $request->user();
-        if ($u->role !== 'manager') return response()->json(['message'=>'Only managers'], 403);
+        
         if ($u->customer_id !== $playlist->customer_id) return response()->json(['message'=>'Out of scope'], 403);
 
         $data = $request->validate([

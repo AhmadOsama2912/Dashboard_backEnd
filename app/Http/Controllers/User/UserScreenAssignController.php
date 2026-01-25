@@ -15,7 +15,7 @@ class UserScreenAssignController extends Controller
     public function assign(Request $request, Screen $screen)
     {
         $manager = $request->user();
-        if ($manager->role !== 'manager') return response()->json(['message'=>'Only managers'], 403);
+
 
         // الشاشة لازم تكون ضمن نفس الشركة
         if ((int) $screen->customer_id !== (int) $manager->customer_id) {
@@ -57,7 +57,6 @@ class UserScreenAssignController extends Controller
     public function unassign(Request $request, Screen $screen)
     {
         $manager = $request->user();
-        if ($manager->role !== 'manager') return response()->json(['message'=>'Only managers'], 403);
 
         if ((int) $screen->customer_id !== (int) $manager->customer_id) {
             return response()->json(['message'=>'Screen not in your customer scope'], 403);

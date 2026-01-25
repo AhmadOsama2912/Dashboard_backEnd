@@ -15,6 +15,7 @@ class AdminCustomerUserController extends Controller
      */
     public function index(Request $request)
     {
+        // dd('admin customer users index');
         $data = $request->validate([
             'q'           => ['nullable','string','max:190'],
             'role'        => ['nullable','in:manager,supervisor'],

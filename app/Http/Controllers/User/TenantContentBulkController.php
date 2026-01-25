@@ -22,9 +22,7 @@ class TenantContentBulkController extends Controller
         /** @var User $u */
         $u = $request->user();
 
-        if (!$u || $u->role !== 'manager') {
-            return response()->json(['message' => 'Only managers'], 403);
-        }
+
 
         $data = $request->validate([
             'playlist_id' => ['nullable', 'integer', 'exists:playlists,id'],
@@ -146,10 +144,6 @@ class TenantContentBulkController extends Controller
     {
         /** @var User $u */
         $u = $request->user();
-
-        if (!$u || $u->role !== 'manager') {
-            return response()->json(['message' => 'Only managers'], 403);
-        }
 
         event(new ScreenConfigUpdated((int) $u->customer_id, null, ''));
 
